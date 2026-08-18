@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LED Remote Control</title>
+  <!-- MQTT client library (loads from CDN on the real site) -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 60px;
+      background: #15181d;
+      color: #e8e8e8;
+    }
+    h1 { font-weight: 600; }
+    button {
+      font-size: 24px;
+      padding: 16px 40px;
+      margin: 12px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #fff;
+    }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    #onBtn  { background: #1f9d55; }
+    #offBtn { background: #c0392b; }
+    #status { margin-top: 24px; font-size: 16px; color: #9aa4b0; }
+  </style>
+</head>
+<body>
+  <h1>LED Remote Control</h1>
+
+  <button id="onBtn"  onclick="sendCommand('ON')"  disabled>ON</button>
+  <button id="offBtn" onclick="sendCommand('OFF')" disabled>OFF</button>
+
+  <div id="status">Connecting…</div>
+
+  <script>
+    // ================= SETTINGS =================
+    // Secure WebSocket is required because GitHub Pages is HTTPS.
+    // Fallback if emqx is ever down: wss://broker.hivemq.com:8884/mqtt
+    const BROKER_URL = "wss://broker.emqx.io:8084/mqtt";
+
+    // This is your shared "password". Anyone who knows it can control the lamp,
+    // so change it to your own long random string — IT MUST MATCH the TOPIC
+    // in remote_led_listener.py exactly.
+    const TOPIC = "led-remote/f4k9q2m7xv/command";
+    // =============================================
+
+    const statusEl = document.getElementById("status");
+    const onBtn  = document.getElementById("onBtn");
+    const offBtn = document.getElementById("offBtn");
+
+    const client = mqtt.connect(BROKER_URL, {
+      clientId: "ledweb-" + Math.random().toString(16).slice(2, 10),
+      keepalive: 30,
+      reconnectPeriod: 2000,
+      connectTimeout: 10000,
+      clean: true
+    });
+
+    client.on("connect", () => {
+      statusEl.textContent = "Connected — ready.";
+      onBtn.disabled = false;
+      offBtn.disabled = false;
+    });
+
+    client.on("reconnect", () => {
+      statusEl.textContent = "Reconnecting…";
+      onBtn.disabled = true;
+      offBtn.disabled = true;
+    });
+
+    client.on("error", (e) => {
+      statusEl.textContent = "Error: " + e.message;
+    });
+
+    function sendCommand(cmd) {
+      statusEl.textContent = "Sending " + cmd + "...";
+      client.publish(TOPIC, cmd, { qos: 1 }, (err) => {
+        statusEl.textContent = err ? ("Error: " + err.message) : ("Sent: " + cmd + " ✔");
+      });
+    }
+  </script>
+</body>
+</html>
