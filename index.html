@@ -215,7 +215,10 @@
   PRESETS.forEach(hex => {
     const b = document.createElement("button");
     b.className = "sw"; b.style.background = hex; b.title = hex;
-    b.onclick = () => send("COLOR " + hex.slice(1));
+    b.onclick = () => {
+      document.getElementById("picker").value = hex;   // optimistic update
+      send("COLOR " + hex.slice(1));
+    };
     swBox.appendChild(b);
   });
 
@@ -328,9 +331,22 @@
         }
       }
     } else {
-      stripLine.textContent = connected.length
-        ? `${connected.length} strip${connected.length > 1 ? "s" : ""} online — commands sync to all`
-        : "No strips found yet — scanning…";
+      // "All" mode: mirror the first connected strip so the page always
+      // shows the real live state (colour / brightness / on-off)
+      const d = connected[0];
+      if (d) {
+        const fx = d.effect !== "none" ? " • " + d.effect : "";
+        stripLine.textContent =
+          `${connected.length} strip${connected.length > 1 ? "s" : ""} online` +
+          ` • ${d.on ? "ON" : "OFF"} • ${d.color} • ${d.brightness}%${fx}`;
+        if (/^#/.test(d.color)) document.getElementById("picker").value = d.color;
+        if (document.activeElement?.id !== "bright") {
+          document.getElementById("bright").value = d.brightness;
+          document.getElementById("brightVal").textContent = d.brightness + "%";
+        }
+      } else {
+        stripLine.textContent = "No strips found yet — scanning…";
+      }
     }
 
     timersSnapshot = (s.timers || []).map(t => ({ label: t.label, remaining: t.in_sec, at: Date.now() }));
