@@ -3,87 +3,394 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LED Remote Control</title>
-  <!-- MQTT client library (loads from CDN on the real site) -->
+  <title>LED Remote</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
+    :root {
+      --bg: #0d1017; --card: rgba(255,255,255,0.05); --card-border: rgba(255,255,255,0.09);
+      --text: #e9edf3; --muted: #8b94a3; --accent: #6c8cff; --good: #2ecc71; --bad: #e74c3c;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin-top: 60px;
-      background: #15181d;
-      color: #e8e8e8;
+      margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 500px at 20% -10%, rgba(108,140,255,0.18), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, rgba(155,48,255,0.14), transparent 55%),
+        var(--bg);
+      color: var(--text); min-height: 100vh; padding: 24px 14px 60px;
+      display: flex; flex-direction: column; align-items: center;
     }
-    h1 { font-weight: 600; }
-    button {
-      font-size: 24px;
-      padding: 16px 40px;
-      margin: 12px;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      color: #fff;
+    header { text-align: center; margin-bottom: 14px; }
+    h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: 0.5px; }
+    .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; font-size: 13px; }
+    .badge {
+      padding: 5px 12px; border-radius: 999px; background: var(--card);
+      border: 1px solid var(--card-border); color: var(--muted);
+      display: inline-flex; align-items: center; gap: 7px;
     }
-    button:disabled { opacity: 0.35; cursor: not-allowed; }
-    #onBtn  { background: #1f9d55; }
-    #offBtn { background: #c0392b; }
-    #status { margin-top: 24px; font-size: 16px; color: #9aa4b0; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+    .dot.on { background: var(--good); box-shadow: 0 0 8px var(--good); }
+    #stripLine { color: var(--text); }
+
+    main { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--card-border);
+      border-radius: 18px; padding: 18px; backdrop-filter: blur(6px);
+    }
+    .card h2 {
+      margin: 0 0 14px; font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--muted); font-weight: 600;
+    }
+
+    /* strip selector */
+    .strips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .strip-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 16px; border-radius: 999px; font-size: 15px; cursor: pointer;
+      background: var(--card); border: 1px solid var(--card-border); color: var(--text);
+    }
+    .strip-chip.sel { border-color: var(--accent); background: rgba(108,140,255,0.15); }
+    .strip-chip .dot { flex: none; }
+
+    .power-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .pwr {
+      font-size: 22px; font-weight: 700; padding: 22px 0; border: none;
+      border-radius: 14px; cursor: pointer; color: #fff; transition: transform .08s;
+    }
+    .pwr:active { transform: scale(0.96); }
+    #onBtn  { background: linear-gradient(135deg, #2ecc71, #1f9d55); }
+    #offBtn { background: linear-gradient(135deg, #e74c3c, #b93224); }
+
+    .color-row { display: flex; gap: 12px; align-items: center; }
+    input[type="color"] { width: 64px; height: 48px; border: none; border-radius: 12px; background: none; cursor: pointer; padding: 0; }
+    .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+    .sw { aspect-ratio: 1; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform .1s; }
+    .sw:hover { transform: scale(1.12); }
+
+    .slider-row { display: flex; align-items: center; gap: 14px; }
+    input[type="range"] { flex: 1; accent-color: var(--accent); height: 28px; }
+    #brightVal { min-width: 48px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip {
+      padding: 10px 16px; border-radius: 999px; border: 1px solid var(--card-border);
+      background: var(--card); color: var(--text); font-size: 15px; cursor: pointer;
+      transition: transform .08s;
+    }
+    .chip:active { transform: scale(0.95); }
+    .chip.hot { border-color: var(--accent); color: var(--accent); }
+
+    .timer-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    select, input[type="number"] {
+      width: 100%; padding: 12px; border-radius: 12px; font-size: 16px;
+      background: rgba(0,0,0,0.3); color: var(--text); border: 1px solid var(--card-border); outline: none;
+    }
+    .min-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .min-chips .chip { padding: 8px 13px; font-size: 14px; }
+    .min-chips .chip.sel { border-color: var(--accent); color: var(--accent); }
+    .timer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .action-btn { padding: 13px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; color: #fff; }
+    #startTimerBtn { background: linear-gradient(135deg, #6c8cff, #4d64d8); }
+    #cancelTimersBtn { background: rgba(255,255,255,0.1); color: var(--muted); }
+
+    #timerList { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .titem {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(0,0,0,0.25); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 10px 14px; font-size: 15px;
+    }
+    .titem .count { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    #status { text-align: center; color: var(--muted); font-size: 14px; margin-top: 6px; min-height: 20px; }
+    button:disabled { opacity: 0.35; pointer-events: none; }
   </style>
 </head>
 <body>
-  <h1>LED Remote Control</h1>
 
-  <button id="onBtn"  onclick="sendCommand('ON')"  disabled>ON</button>
-  <button id="offBtn" onclick="sendCommand('OFF')" disabled>OFF</button>
+<header>
+  <h1>💡 LED Remote</h1>
+  <div class="badges">
+    <span class="badge"><span class="dot" id="hubDot"></span><span id="hubText">Hub: offline</span></span>
+    <span class="badge" id="stripLine">—</span>
+  </div>
+</header>
+
+<main>
+  <!-- STRIP SELECTOR -->
+  <section class="card">
+    <h2>Which strip?</h2>
+    <div class="strips" id="stripChips">
+      <button class="strip-chip sel" data-alias="">🔗 All (sync)</button>
+    </div>
+    <div style="margin-top:12px">
+      <button class="chip" onclick="send('SCAN')">🔄 Find new strips</button>
+    </div>
+  </section>
+
+  <!-- POWER -->
+  <section class="card">
+    <h2>Power</h2>
+    <div class="power-row">
+      <button class="pwr" id="onBtn"  onclick="send('ON')"  disabled>ON</button>
+      <button class="pwr" id="offBtn" onclick="send('OFF')" disabled>OFF</button>
+    </div>
+  </section>
+
+  <!-- COLOUR -->
+  <section class="card">
+    <h2>Colour</h2>
+    <div class="color-row">
+      <input type="color" id="picker" value="#ff8800">
+      <button class="chip" style="flex:1" onclick="applyPicker()">Apply colour 🎨</button>
+    </div>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <!-- BRIGHTNESS -->
+  <section class="card">
+    <h2>Brightness</h2>
+    <div class="slider-row">
+      <input type="range" id="bright" min="1" max="100" value="100">
+      <span id="brightVal">100%</span>
+    </div>
+  </section>
+
+  <!-- EFFECTS -->
+  <section class="card">
+    <h2>Effects</h2>
+    <div class="chips">
+      <button class="chip" onclick="send('FX RAINBOW')">🌈 Rainbow</button>
+      <button class="chip" onclick="send('FX BREATHE')">🌊 Breathe</button>
+      <button class="chip" onclick="send('FX STROBE')">⚡ Strobe</button>
+      <button class="chip" onclick="send('FX CANDLE')">🕯️ Candle</button>
+      <button class="chip hot" onclick="send('STOP')">⏹ Stop</button>
+    </div>
+  </section>
+
+  <!-- TIMERS -->
+  <section class="card">
+    <h2>Timers</h2>
+    <div class="timer-grid">
+      <select id="timerAction">
+        <option value="on">💡 Turn ON in…</option>
+        <option value="off" selected>🌙 Turn OFF in… (sleep timer)</option>
+        <option value="flash">🚨 FLASH alarm in…</option>
+        <option value="sunrise">🌅 Sunrise fade over…</option>
+      </select>
+      <div class="min-chips" id="minChips"></div>
+      <input type="number" id="customMins" min="1" max="720" placeholder="…or type minutes">
+      <div class="timer-actions">
+        <button class="action-btn" id="startTimerBtn" onclick="startTimer()">Start timer</button>
+        <button class="action-btn" id="cancelTimersBtn" onclick="send('CANCEL')">Cancel all</button>
+      </div>
+      <div id="timerList"></div>
+    </div>
+  </section>
 
   <div id="status">Connecting…</div>
+</main>
 
-  <script>
-    // ================= SETTINGS =================
-    // Secure WebSocket is required because GitHub Pages is HTTPS.
-    // Fallback if emqx is ever down: wss://broker.hivemq.com:8884/mqtt
-    const BROKER_URL = "wss://broker.emqx.io:8084/mqtt";
+<script>
+  // ================= SETTINGS (must match remote_led_listener.py) =================
+  const BROKER_URL   = "wss://broker.emqx.io:8084/mqtt";   // fallback: wss://broker.hivemq.com:8884/mqtt
+  const TOPIC_CMD    = "led-remote/f4k9q2m7xv/command";
+  const TOPIC_STATUS = "led-remote/f4k9q2m7xv/status";
+  // ================================================================================
 
-    // This is your shared "password". Anyone who knows it can control the lamp,
-    // so change it to your own long random string — IT MUST MATCH the TOPIC
-    // in remote_led_listener.py exactly.
-    const TOPIC = "led-remote/f4k9q2m7xv/command";
-    // =============================================
+  const statusEl  = document.getElementById("status");
+  const hubDot    = document.getElementById("hubDot");
+  const hubText   = document.getElementById("hubText");
+  const stripLine = document.getElementById("stripLine");
+  const chipsBox  = document.getElementById("stripChips");
+  const CONTROL_IDS = ["onBtn","offBtn","startTimerBtn"];
 
-    const statusEl = document.getElementById("status");
-    const onBtn  = document.getElementById("onBtn");
-    const offBtn = document.getElementById("offBtn");
+  let mqttReady = false;
+  let selectedAlias = "";          // "" = All (sync)
+  let lastDevices = [];
 
+  /* ---------- presets + minute chips ---------- */
+  const PRESETS = ["#ffffff","#ffb46b","#ff2d2d","#ff8a00","#ffe14d",
+                   "#2ecc71","#00e5ff","#2979ff","#9b30ff","#ff4d94"];
+  const swBox = document.getElementById("swatches");
+  PRESETS.forEach(hex => {
+    const b = document.createElement("button");
+    b.className = "sw"; b.style.background = hex; b.title = hex;
+    b.onclick = () => send("COLOR " + hex.slice(1));
+    swBox.appendChild(b);
+  });
+
+  const MINUTES = [5, 10, 15, 20, 30, 45, 60];
+  let selMins = 10;
+  const chipBox = document.getElementById("minChips");
+  MINUTES.forEach(m => {
+    const c = document.createElement("button");
+    c.className = "chip" + (m === selMins ? " sel" : "");
+    c.textContent = m + "m";
+    c.onclick = () => {
+      selMins = m;
+      document.getElementById("customMins").value = "";
+      [...chipBox.children].forEach(x => x.classList.remove("sel"));
+      c.classList.add("sel");
+    };
+    chipBox.appendChild(c);
+  });
+
+  /* ---------- MQTT ---------- */
+  if (typeof mqtt === "undefined") {
+    statusEl.textContent = "⚠️ MQTT library didn't load (no network in this preview — it works on the real site).";
+  } else {
     const client = mqtt.connect(BROKER_URL, {
       clientId: "ledweb-" + Math.random().toString(16).slice(2, 10),
-      keepalive: 30,
-      reconnectPeriod: 2000,
-      connectTimeout: 10000,
-      clean: true
+      keepalive: 30, reconnectPeriod: 2000, connectTimeout: 10000, clean: true
     });
 
     client.on("connect", () => {
-      statusEl.textContent = "Connected — ready.";
-      onBtn.disabled = false;
-      offBtn.disabled = false;
+      mqttReady = true;
+      statusEl.textContent = "Connected ✔";
+      CONTROL_IDS.forEach(id => document.getElementById(id).disabled = false);
+      client.subscribe(TOPIC_STATUS);
+    });
+    client.on("reconnect", () => setOffline("Reconnecting…"));
+    client.on("close",     () => setOffline("Disconnected"));
+    client.on("error",  e => { statusEl.textContent = "Error: " + e.message; });
+
+    client.on("message", (topic, payload) => {
+      if (topic !== TOPIC_STATUS) return;
+      let s; try { s = JSON.parse(payload.toString()); } catch { return; }
+      renderStatus(s);
     });
 
-    client.on("reconnect", () => {
-      statusEl.textContent = "Reconnecting…";
-      onBtn.disabled = true;
-      offBtn.disabled = true;
-    });
+    window._send = cmd => new Promise(resolve =>
+      client.publish(TOPIC_CMD, cmd, { qos: 1 }, err => resolve(!err)));
+  }
 
-    client.on("error", (e) => {
-      statusEl.textContent = "Error: " + e.message;
-    });
+  function setOffline(msg) {
+    mqttReady = false;
+    statusEl.textContent = msg;
+    CONTROL_IDS.forEach(id => document.getElementById(id).disabled = true);
+  }
 
-    function sendCommand(cmd) {
-      statusEl.textContent = "Sending " + cmd + "...";
-      client.publish(TOPIC, cmd, { qos: 1 }, (err) => {
-        statusEl.textContent = err ? ("Error: " + err.message) : ("Sent: " + cmd + " ✔");
+  /* ---------- outbound (adds @alias prefix when a single strip is chosen) ---------- */
+  async function send(cmd) {
+    if (!mqttReady) { statusEl.textContent = "Not connected yet…"; return; }
+    const full = selectedAlias ? `@${selectedAlias} ${cmd}` : cmd;
+    statusEl.textContent = "➜ " + full;
+    const ok = await window._send(full);
+    statusEl.textContent = ok ? "Sent ✔  " + full : "Send failed";
+  }
+
+  function applyPicker() { send("COLOR " + document.getElementById("picker").value.slice(1)); }
+
+  let brightTimer = null;
+  document.getElementById("bright").addEventListener("input", e => {
+    document.getElementById("brightVal").textContent = e.target.value + "%";
+    clearTimeout(brightTimer);
+    brightTimer = setTimeout(() => send("BRIGHT " + e.target.value), 180);
+  });
+
+  function startTimer() {
+    const custom = parseInt(document.getElementById("customMins").value, 10);
+    const mins = Number.isFinite(custom) && custom > 0 ? custom : selMins;
+    const action = document.getElementById("timerAction").value;
+    send({ on: `TIMER ON ${mins}`, off: `TIMER OFF ${mins}`,
+           flash: `FLASH_IN ${mins}`, sunrise: `SUNRISE ${mins}` }[action]);
+  }
+
+  /* ---------- inbound status ---------- */
+  let timersSnapshot = [];
+
+  function renderStatus(s) {
+    const online = !!s.online;
+    hubDot.classList.toggle("on", online);
+    hubText.textContent = "Hub: " + (online ? "online" : "offline");
+
+    if (!online) {
+      stripLine.textContent = "— start the Python listener to control the strips";
+      timersSnapshot = []; renderTimers();
+      lastDevices = []; renderStripChips();
+      return;
+    }
+
+    lastDevices = s.devices || [];
+    renderStripChips();
+
+    const connected = lastDevices.filter(d => d.connected);
+    if (selectedAlias) {
+      const d = lastDevices.find(x => x.alias === selectedAlias);
+      if (d) {
+        const fx = d.effect !== "none" ? " • " + d.effect : "";
+        stripLine.textContent = `${d.alias}: ${d.connected ? (d.on ? "ON" : "OFF") : "offline"}`
+                              + ` • ${d.color} • ${d.brightness}%${fx}`;
+        if (d.connected && /^#/.test(d.color)) document.getElementById("picker").value = d.color;
+        if (d.connected && document.activeElement?.id !== "bright") {
+          document.getElementById("bright").value = d.brightness;
+          document.getElementById("brightVal").textContent = d.brightness + "%";
+        }
+      }
+    } else {
+      stripLine.textContent = connected.length
+        ? `${connected.length} strip${connected.length > 1 ? "s" : ""} online — commands sync to all`
+        : "No strips found yet — scanning…";
+    }
+
+    timersSnapshot = (s.timers || []).map(t => ({ label: t.label, remaining: t.in_sec, at: Date.now() }));
+    renderTimers();
+  }
+
+  function renderStripChips() {
+    // rebuild chips only when the set of aliases changed
+    const aliases = lastDevices.map(d => d.alias);
+    const existing = [...chipsBox.querySelectorAll("[data-alias]")].map(c => c.dataset.alias).filter(a => a);
+    if (JSON.stringify(aliases) !== JSON.stringify(existing)) {
+      chipsBox.innerHTML = "";
+      const all = document.createElement("button");
+      all.className = "strip-chip"; all.dataset.alias = "";
+      all.textContent = "🔗 All (sync)";
+      all.onclick = () => selectStrip("");
+      chipsBox.appendChild(all);
+      lastDevices.forEach(d => {
+        const c = document.createElement("button");
+        c.className = "strip-chip"; c.dataset.alias = d.alias;
+        c.innerHTML = `<span class="dot${d.connected ? " on" : ""}"></span>${d.alias}`;
+        c.onclick = () => selectStrip(d.alias);
+        chipsBox.appendChild(c);
       });
     }
-  </script>
+    // refresh selection + online dots
+    [...chipsBox.children].forEach(c => {
+      c.classList.toggle("sel", c.dataset.alias === selectedAlias);
+      const d = lastDevices.find(x => x.alias === c.dataset.alias);
+      if (d) {
+        const dot = c.querySelector(".dot");
+        if (dot) dot.classList.toggle("on", d.connected);
+      }
+    });
+  }
+
+  function selectStrip(alias) {
+    selectedAlias = alias;
+    renderStripChips();
+    const d = lastDevices.find(x => x.alias === alias);
+    stripLine.textContent = alias
+      ? (d ? `${alias} selected` : alias + " selected")
+      : "All strips selected — commands sync";
+  }
+
+  /* ---------- timers ---------- */
+  function renderTimers() {
+    const box = document.getElementById("timerList");
+    box.innerHTML = "";
+    const now = Date.now();
+    timersSnapshot.forEach(t => {
+      const left = Math.max(0, Math.round(t.remaining - (now - t.at) / 1000));
+      const m = Math.floor(left / 60), s = left % 60;
+      const div = document.createElement("div");
+      div.className = "titem";
+      div.innerHTML = `<span>${t.label}</span><span class="count">${m}:${String(s).padStart(2,"0")}</span>`;
+      box.appendChild(div);
+    });
+  }
+  setInterval(renderTimers, 1000);
+</script>
 </body>
 </html>
