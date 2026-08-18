@@ -208,6 +208,32 @@
   let selectedAlias = "";          // "" = All (sync)
   let lastDevices = [];
 
+  /* ---------- URL-trigger mode: ?cmd=OFF&strip=bed (NFC tags, Shortcuts, Tasker) ---------- */
+  const autoCmd   = new URLSearchParams(location.search).get("cmd");
+  const autoStrip = new URLSearchParams(location.search).get("strip");
+
+  function runAutoCmd() {
+    const full = (autoStrip ? `@${autoStrip} ` : "") + autoCmd;
+    statusEl.textContent = "➜ auto: " + full;
+    window._send(full).then(ok => {
+      const banner = document.createElement("div");
+      banner.style.cssText =
+        "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;" +
+        "background:rgba(0,0,0,0.75);z-index:10;text-align:center;padding:24px;";
+      banner.innerHTML =
+        `<div style="background:#1b2230;border:1px solid rgba(255,255,255,0.15);border-radius:20px;
+                     padding:36px 30px;max-width:320px;">
+           <div style="font-size:52px">${ok ? "✅" : "⚠️"}</div>
+           <div style="font-size:20px;font-weight:700;margin:10px 0 6px">
+             ${ok ? "Command sent" : "Send failed"}</div>
+           <div style="color:#8b94a3">${full}</div>
+           <div style="color:#8b94a3;font-size:13px;margin-top:14px">You can close this tab.</div>
+         </div>`;
+      document.body.appendChild(banner);
+      document.title = (ok ? "✅ " : "⚠️ ") + autoCmd;
+    });
+  }
+
   /* ---------- presets + minute chips ---------- */
   const PRESETS = ["#ffffff","#ffb46b","#ff2d2d","#ff8a00","#ffe14d",
                    "#2ecc71","#00e5ff","#2979ff","#9b30ff","#ff4d94"];
@@ -252,6 +278,7 @@
       statusEl.textContent = "Connected ✔";
       CONTROL_IDS.forEach(id => document.getElementById(id).disabled = false);
       client.subscribe(TOPIC_STATUS);
+      if (autoCmd) runAutoCmd();        // NFC / automation trigger fired
     });
     client.on("reconnect", () => setOffline("Reconnecting…"));
     client.on("close",     () => setOffline("Disconnected"));
